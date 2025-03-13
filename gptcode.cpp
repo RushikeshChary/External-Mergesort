@@ -18,12 +18,14 @@ int totalTransfers = 0;
 Block readBlock(ifstream &input, int blockSize) {
     Block block;
     int value;
-    for (int i = 0; i < blockSize && input >> value; ++i) {
-        block.data.push_back(value);
+    for (int i = 0; i < blockSize; ++i) {
+        if(input >> value)
+            block.data.push_back(value);
+        else break;
     }
-    if (!block.data.empty()) {
-        totalTransfers += 2; // One read and one write per block
-    }
+    // if (!block.data.empty()) {
+    //     totalTransfers += 2; // One read and one write per block
+    // }
     return block;
 }
 
@@ -33,9 +35,9 @@ void writeBlock(const Block &block, const string &filename) {
     for (int val : block.data) {
         output << val << "\n";
     }
-    if (!block.data.empty()) {
-        totalTransfers += 2; // One read and one write per block
-    }
+    // if (!block.data.empty()) {
+    //     totalTransfers += 2; // One read and one write per block
+    // }
 }
 
 // Initial phase: Create sorted runs
@@ -46,8 +48,13 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
 
     while (!input.eof()) {
         Block block = readBlock(input, blockSize * memoryBlocks);
+        for(int i = 0;i < memoryBlocks;i++)
+        {
+            vector<int> disk_block = readBlock(input,blockSize).data;
+            totalTransfers++;
+            block.data.insert(block.data.end(),disk_block.begin(),disk_block.end());
+        }
         totalSeeks++; // One seek per run
-        totalTransfers += memoryBlocks;
         if (block.data.empty()) break;
 
         // Sort the block
@@ -57,8 +64,6 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
         string runFile = "run_" + to_string(runCount++) + ".txt";
         writeBlock(block, runFile);
         runFiles.push_back(runFile);
-
-        
     }
 
     input.close();
