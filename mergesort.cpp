@@ -68,36 +68,48 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
     int runCount = 0;
 
     while (!input.eof()) {
-        
         vector<Block> blocks;
         totalSeeks++; // One seek per read.
-        for(int i = 0;i < memoryBlocks;i++)
-        {
-            Block block;
-            block = readBlock(input,blockSize);
+
+        // Read blocks into memory
+        for (int i = 0; i < memoryBlocks; i++) {
+            Block block = readBlock(input, blockSize);
+            if (block.data.empty()) break; // Handle end of file
             blocks.push_back(block);
         }
 
-        // Sort the blocks
-        for(Block& b : blocks)
-            sort(b.data.begin(),b.data.end());
+        // Collect all data from blocks into a single vector
+        vector<int> allData;
+        for (const Block &b : blocks) {
+            allData.insert(allData.end(), b.data.begin(), b.data.end());
+        }
 
-        // Write to a new temporary file
+        // Global sort across all blocks
+        sort(allData.begin(), allData.end());
+
+        // Write sorted data to a new temporary file
         string runFile = "run_" + to_string(runCount++) + ".txt";
         ofstream output(runFile);
         totalSeeks++; // One seek per write.
-        for(Block& b : blocks)
-        {
-            writeBlock(b, output);
+
+        // Split the sorted data back into blocks and write
+        for (size_t i = 0; i < allData.size(); i += blockSize) {
+            Block block;
+            block.data.assign(allData.begin() + i,
+                              allData.begin() + min(i + blockSize, allData.size()));
+            writeBlock(block, output);
         }
+
         runFiles.push_back(runFile);
         output.close();
     }
-    cout<<"After initial sorted run phase:\n";
+
+    cout << "After initial sorted run phase:\n";
     cout << "Total Disk Seeks: " << totalSeeks << ", Total Disk Transfers: " << totalTransfers << "\n";
     input.close();
     return runFiles;
 }
+
 
 // Merge phase: Perform (m-1)-way merge and produce intermediate runs
 vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memoryBlocks) {
