@@ -68,20 +68,15 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
     int runCount = 0;
 
     while (!input.eof()) {
-        vector<Block> blocks;
-        totalSeeks++; // One seek per read.
+        // Collect all data from blocks into a single vector
+        vector<int> allData;
 
+        totalSeeks++; // One seek per read.
         // Read blocks into memory
         for (int i = 0; i < memoryBlocks; i++) {
             Block block = readBlock(input, blockSize);
             if (block.data.empty()) break; // Handle end of file
-            blocks.push_back(block);
-        }
-
-        // Collect all data from blocks into a single vector
-        vector<int> allData;
-        for (const Block &b : blocks) {
-            allData.insert(allData.end(), b.data.begin(), b.data.end());
+            allData.insert(allData.end(), block.data.begin(), block.data.end());
         }
 
         // Global sort across all blocks
@@ -90,8 +85,8 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
         // Write sorted data to a new temporary file
         string runFile = "run_" + to_string(runCount++) + ".txt";
         ofstream output(runFile);
-        totalSeeks++; // One seek per write.
 
+        totalSeeks++; // One seek per write.
         // Split the sorted data back into blocks and write
         for (size_t i = 0; i < allData.size(); i += blockSize) {
             Block block;
