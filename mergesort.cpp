@@ -61,6 +61,17 @@ void writeBlock(const Block &block, ofstream &output) {
     }
 }
 
+// Function to output the contents of a given file.
+void outputContents(const string &outputFile) {
+    ifstream input(outputFile);
+    vector<int> data;
+    int value;
+    while (input >> value) {
+        data.push_back(value);
+    }
+    cout << "Contents of " << outputFile << ": \n" << data << endl;
+}
+
 // Initial phase: Create sorted runs
 vector<string> createInitialRuns(const string &inputFile, int blockSize, int memoryBlocks) {
     ifstream input(inputFile);
@@ -100,6 +111,10 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
     }
 
     cout << "After initial sorted run phase:\n";
+    // Output the contents of all these runFiles.
+    for (const auto &runFile : runFiles) {
+        outputContents(runFile);
+    }
     cout << "Total Disk Seeks: " << totalSeeks << ", Total Disk Transfers: " << totalTransfers << "\n";
     input.close();
     return runFiles;
@@ -114,7 +129,7 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
 
     vector<string> currentRuns = runFiles;
 
-    while (currentRuns.size() >= memoryBlocks) {
+    while (currentRuns.size() > 1) {
         int runCount = 0;
 
         for (size_t i = 0; i < currentRuns.size(); i += mergeFactor) {
@@ -138,8 +153,8 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
             for (int j = 0; j < subset.size(); ++j) {
                 inputs[j].open(subset[j]);
                 if (inputs[j].is_open()) {
+                    totalSeeks++;   //Each time a block is accessed, a seek will be made since the tip changes every time.
                     buffers[j] = readBlock(inputs[j], blockSize);
-                    totalSeeks++;
                     if (!buffers[j].empty()) {
                         minHeap.emplace(buffers[j].data[buffers[j].index++], j);
                     }
@@ -151,7 +166,9 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
 
             // Perform the merge
             while (!minHeap.empty()) {
-                auto [value, idx] = minHeap.top();
+                pair<int,int> p = minHeap.top();
+                int value = p.first;
+                int idx = p.second;
                 minHeap.pop();
 
                 // Store the smallest value in the output buffer
@@ -159,8 +176,8 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
 
                 // Write the output buffer if it's full
                 if (outputBuffer.data.size() == blockSize) {
-                    writeBlock(outputBuffer,output);
                     totalSeeks++;
+                    writeBlock(outputBuffer,output);
                     outputBuffer.reset();
                 }
 
@@ -177,9 +194,9 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
             }
 
             // Write any remaining data in the output buffer
-            if (!outputBuffer.empty()) {
-                writeBlock(outputBuffer,output);
+            if (!outputBuffer.data.empty()) {
                 totalSeeks++;
+                writeBlock(outputBuffer,output);
                 outputBuffer.reset();
             }
 
@@ -188,20 +205,21 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
             for (auto &input : inputs) input.close();
         }
 
-        // Add any remaining runs to newRunFiles
-        for (size_t j = (currentRuns.size() / mergeFactor) * mergeFactor; j < currentRuns.size(); ++j) {
-            newRunFiles.push_back(currentRuns[j]);
-        }
 
         currentRuns = newRunFiles;
         newRunFiles.clear();
         pass++;
-
-        cout << "Pass " << pass << ": Total Seeks = " << totalSeeks << ", Total Transfers = " << totalTransfers << "\n";
+        cout << "After pass " << pass << ":\n";
+        // Ouput contents of all these currentRuns.
+        for (const auto &runFile : currentRuns) {
+            outputContents(runFile);
+        }
+        cout <<"Total Disk Seeks = " << totalSeeks << ", Total Disk Transfers = " << totalTransfers << "\n";
     }
 
     // Add the last set of runs in the correct order
     newRunFiles.insert(newRunFiles.end(), currentRuns.begin(), currentRuns.end());
+    cout << "Total number of merge-passes: "<< pass << "\n";
 
     return newRunFiles;
 }
@@ -218,6 +236,12 @@ int main(int argc, char *argv[]) {
     int b = stoi(argv[4]);  // Disk block size in bytes
     int m = stoi(argv[5]);  // Available memory in blocks
 
+    if(n < 3)
+    {
+        cerr << "Error: n must be greater than or equal to 3 to perform external mergesort.\n";
+        return 1;
+    }
+
     cout << "Running external merge sort on " << inputFile << " with parameters:\n";
     cout << "n = " << n << ", k = " << k << ", b = " << b << ", m = " << m << "\n";
 
@@ -229,23 +253,10 @@ int main(int argc, char *argv[]) {
     vector<string> finalRuns = mergeRuns(runFiles, b / k, m);
 
     // Final merged output
-    for (string run_file : finalRuns) {
-        cout << "Merging completed. Final output written to: " << run_file << "\n";
+    if (!finalRuns.empty()) {
+        cout << "Merging completed. Final output written to: " << finalRuns[0] << "\n";
     }
-    //concatenate these files to get final output.
-    // string finalOutputFile = "sorted_" + inputFile;
-    // ofstream output(finalOutputFile);
-    // for (string run_file : finalRuns) {
-    //     ifstream input(run_file);
-    //     string line;
-    //     while (getline(input, line)) {
-    //         output << line << "\n";
-    //     }
-    //     input.close();
-    //     remove(run_file.c_str());
-    // }
-    // output.close();
-
+    cout << "Finally, total cost is: \n";
     cout << "Total Disk Seeks: " << totalSeeks << ", Total Disk Transfers: " << totalTransfers << "\n";
 
     return 0;
