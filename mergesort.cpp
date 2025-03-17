@@ -35,6 +35,9 @@ struct Block {
 int totalSeeks = 0;
 int totalTransfers = 0;
 
+// Array of all txt files (Used to delete all txt files (unwanted) at the end of the program).
+vector<string> temp_files;
+
 // Helper function to read a block of data from the input file
 Block readBlock(ifstream &input, int blockSize) {
     Block block;
@@ -69,7 +72,7 @@ void outputContents(const string &outputFile) {
     while (input >> value) {
         data.push_back(value);
     }
-    cout << "Contents of " << outputFile << ": \n" << data << endl;
+    cout << "*Contents of " << outputFile << ": \n" << data << endl;
 }
 
 // Initial phase: Create sorted runs
@@ -105,7 +108,7 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
                               allData.begin() + min(i + blockSize, allData.size()));
             writeBlock(block, output);
         }
-
+        temp_files.push_back(runFile);
         runFiles.push_back(runFile);
         output.close();
     }
@@ -115,7 +118,7 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
     for (const auto &runFile : runFiles) {
         outputContents(runFile);
     }
-    cout << "Total Disk Seeks: " << totalSeeks << ", Total Disk Transfers: " << totalTransfers << "\n";
+    cout << "--> Total Disk Seeks: " << totalSeeks << ", Total Disk Transfers: " << totalTransfers << "\n";
     input.close();
     return runFiles;
 }
@@ -125,10 +128,10 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
 vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memoryBlocks) {
     int mergeFactor = memoryBlocks - 1; // m-1 way merge
     vector<string> newRunFiles;
-    int pass = 0;
+    int pass = 1;
 
     vector<string> currentRuns = runFiles;
-
+    cout<<"Merge pass phase started: \n";
     while (currentRuns.size() > 1) {
         int runCount = 0;
 
@@ -138,6 +141,7 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
 
             // Output file for the merged result
             string mergedFile = "pass_" + to_string(pass) + "_run_" + to_string(runCount++) + ".txt";
+            temp_files.push_back(mergedFile);
             newRunFiles.push_back(mergedFile);
 
             ofstream output(mergedFile);
@@ -153,10 +157,10 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
             for (int j = 0; j < subset.size(); ++j) {
                 inputs[j].open(subset[j]);
                 if (inputs[j].is_open()) {
-                    totalSeeks++;   //Each time a block is accessed, a seek will be made since the tip changes every time.
                     buffers[j] = readBlock(inputs[j], blockSize);
                     if (!buffers[j].empty()) {
                         minHeap.emplace(buffers[j].data[buffers[j].index++], j);
+                        totalSeeks++;   //Each time a block is accessed, a seek will be made since the tip changes every time.
                     }
                 }
             }
@@ -184,7 +188,8 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
                 // Check if the current block is exhausted, load the next block if available
                 if (buffers[idx].empty() && !inputs[idx].eof()) {
                     buffers[idx] = readBlock(inputs[idx], blockSize);
-                    totalSeeks++;
+                    if(!buffers[idx].empty())
+                        totalSeeks++;
                 }
 
                 // If there are still elements in the block, add the next value to the heap
@@ -208,18 +213,18 @@ vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memo
 
         currentRuns = newRunFiles;
         newRunFiles.clear();
+        cout << "**After pass " << pass << ":\n";
         pass++;
-        cout << "After pass " << pass << ":\n";
         // Ouput contents of all these currentRuns.
         for (const auto &runFile : currentRuns) {
             outputContents(runFile);
         }
-        cout <<"Total Disk Seeks = " << totalSeeks << ", Total Disk Transfers = " << totalTransfers << "\n";
+        cout <<"--> Total Disk Seeks = " << totalSeeks << ", Total Disk Transfers = " << totalTransfers << "\n";
     }
 
     // Add the last set of runs in the correct order
     newRunFiles.insert(newRunFiles.end(), currentRuns.begin(), currentRuns.end());
-    cout << "Total number of merge-passes: "<< pass << "\n";
+    cout << "\nTotal number of merge-passes: "<< pass << "\n\n";
 
     return newRunFiles;
 }
@@ -243,11 +248,11 @@ int main(int argc, char *argv[]) {
     }
 
     cout << "Running external merge sort on " << inputFile << " with parameters:\n";
-    cout << "n = " << n << ", k = " << k << ", b = " << b << ", m = " << m << "\n";
+    cout << "n = " << n << ", k = " << k << ", b = " << b << ", m = " << m << "\n\n";
 
     // Step 1: Create initial sorted runs
     vector<string> runFiles = createInitialRuns(inputFile, b / k, m);
-    cout << "Created " << runFiles.size() << " initial runs.\n";
+    cout << "Created " << runFiles.size() << " initial runs.\n\n";
 
     // Step 2: Merge runs in (m-1) way
     vector<string> finalRuns = mergeRuns(runFiles, b / k, m);
@@ -255,9 +260,28 @@ int main(int argc, char *argv[]) {
     // Final merged output
     if (!finalRuns.empty()) {
         cout << "Merging completed. Final output written to: " << finalRuns[0] << "\n";
+        outputContents(finalRuns[0]);
     }
-    cout << "Finally, total cost is: \n";
-    cout << "Total Disk Seeks: " << totalSeeks << ", Total Disk Transfers: " << totalTransfers << "\n";
+    cout << "\nFinally, total cost is: \n";
+    cout << "--> Total Disk Seeks: " << totalSeeks << ", Total Disk Transfers: " << totalTransfers << "\n\n";
+
+
+    //delete all the txt files in this directory
+    char ch;
+    printf("Enter some key and press enter to delete all the temporary files (except final sorted file)\n");
+    if(scanf("%c",&ch))
+    {
+        for(auto &file : temp_files)
+        {
+            if(file != finalRuns[0])
+                remove(file.c_str());
+        }
+    }
+    cout << "All temporary files have been deleted.\n";
+    
+    //Rename this final sorted.
+    rename(finalRuns[0].c_str(), "sorted_output.txt");
+    cout << "Renamed final sorted file to: sorted_output.txt\n";
 
     return 0;
 }
