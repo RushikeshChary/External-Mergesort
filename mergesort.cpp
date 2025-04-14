@@ -128,7 +128,7 @@ vector<string> createInitialRuns(const string &inputFile, int blockSize, int mem
 vector<string> mergeRuns(const vector<string> &runFiles, int blockSize, int memoryBlocks) {
     int mergeFactor = memoryBlocks - 1; // m-1 way merge
     vector<string> newRunFiles;
-    int pass = 1;
+    int pass = 0;
 
     vector<string> currentRuns = runFiles;
     cout<<"Merge pass phase started: \n";
